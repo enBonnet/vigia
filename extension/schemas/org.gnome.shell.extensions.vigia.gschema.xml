@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.vigia" path="/org/gnome/shell/extensions/vigia/">
+    <key name="show-idle" type="b">
+      <default>true</default>
+      <summary>Show the watcher in the top bar when all agents are idle</summary>
+    </key>
+    <key name="keep-awake" type="b">
+      <default>true</default>
+      <summary>Keep the computer awake while any agent is busy or waiting for you</summary>
+    </key>
+    <key name="done-fade-seconds" type="i">
+      <range min="5" max="60"/>
+      <default>10</default>
+      <summary>Seconds the green "done" badge stays lit before dimming</summary>
+    </key>
+    <key name="source-opencode" type="b">
+      <default>true</default>
+      <summary>Watch OpenCode sessions via its background service</summary>
+    </key>
+    <key name="source-claude" type="b">
+      <default>true</default>
+      <summary>Watch Claude Code sessions via the vigia hook reporter</summary>
+    </key>
+    <key name="source-generic" type="b">
+      <default>true</default>
+      <summary>Watch other agents by process name</summary>
+    </key>
+    <key name="generic-processes" type="s">
+      <default>"codex,aider,goose,gemini,cursor-agent"</default>
+      <summary>Comma-separated process names to watch</summary>
+    </key>
+    <key name="poll-interval" type="i">
+      <range min="2" max="30"/>
+      <default>4</default>
+      <summary>OpenCode poll interval in seconds</summary>
+    </key>
+  </schema>
+</schemalist>

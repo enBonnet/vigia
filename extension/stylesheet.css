@@ -1,0 +1,79 @@
+/* Vigía — panel indicator styles */
+
+.vigia-panel-box {
+  spacing: 4px;
+  padding: 0 4px;
+}
+
+.vigia-agent {
+  spacing: 1px;
+}
+
+/* working agents pulse between these two phases (JS toggles the class) */
+.vigia-pulsing {
+  transition-duration: 700ms;
+}
+.vigia-dim-phase {
+  opacity: 0.45;
+}
+
+.vigia-dim {
+  opacity: 0.35;
+  transition-duration: 300ms;
+}
+
+.vigia-badge {
+  font-size: 9px;
+  font-weight: 700;
+}
+.vigia-badge-q {
+  color: #f6d32d;
+}
+.vigia-badge-d {
+  color: #33d17a;
+}
+
+/* menu */
+.vigia-row {
+  spacing: 10px;
+  padding: 4px 8px;
+}
+.vigia-row-title {
+  font-weight: 700;
+}
+.vigia-row-sub {
+  opacity: 0.6;
+  font-size: 0.85em;
+}
+.vigia-state {
+  font-weight: 700;
+}
+.vigia-state-busy {
+  color: #ffffff;
+  font-weight: 700;
+}
+.vigia-state-question {
+  color: #f6d32d;
+  font-weight: 700;
+}
+.vigia-state-done {
+  color: #33d17a;
+}
+.vigia-state-idle {
+  opacity: 0.55;
+}
+.vigia-age {
+  opacity: 0.5;
+  font-size: 0.85em;
+  min-width: 42px;
+  text-align: right;
+}
+.vigia-overflow {
+  font-size: 0.85em;
+  opacity: 0.7;
+  margin-left: 2px;
+}
+.vigia-offline {
+  opacity: 0.6;
+  font-style: italic;
+}

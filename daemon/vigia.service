@@ -1,0 +1,12 @@
+[Unit]
+Description=Vigía agent watcher daemon
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/python3 %ROOT%/daemon/vigiad.py
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=graphical-session.target
