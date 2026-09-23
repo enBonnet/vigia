@@ -157,3 +157,7 @@ text: shovel = working · `?` = needs you · `✓` = done · `zzz` = idle.
   (Apache-2.0).
 - Refresh the imported glyphs with `./scripts/fetch-icons.sh`; the robot and
   the eye are hand-drawn and untouched by it.
+
+## License
+
+[GPL-2.0-or-later](LICENSE) — same as the other enBonnet extensions.
