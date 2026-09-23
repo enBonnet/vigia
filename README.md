@@ -33,6 +33,12 @@ SIGINT (their `Stop` hooks report normally), generic agents are terminated —
 releases the keep-awake hold and shows a notification explaining exactly what
 was stopped. Plug the charger back in and keep working.
 
+## Screenshots
+
+Panel icons and the menu with live agents — working, needs you, done:
+
+![VigIA menu with live agents](screenshots/menu-agents.png)
+
 ## Install
 
 ```bash
