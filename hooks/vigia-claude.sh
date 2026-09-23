@@ -36,8 +36,17 @@ IFS=$'\x1f' read -r STATE SID CWD MSG <<< "${FIELDS}"
 [ -z "${SID}" ] && SID="unknown-$$"
 TITLE=$(basename "${CWD:-unknown}" 2>/dev/null || echo unknown)
 
+# remember the claude CLI process (this script's parent / grandparent) so
+# vigiad can interrupt it on battery-critical emergency and detect a dead
+# session. Join only the non-empty ones (a bare "0" would be parsed as a
+# real PID by the daemon — and os.kill(0) would signal a whole process group)
+P1=$(ps -o ppid= -p $$ 2>/dev/null | tr -d ' ')
+P2=$(ps -o ppid= -p "${P1:-0}" 2>/dev/null | tr -d ' ')
+PIDS="${P1:-}"
+[ -n "${P2}" ] && PIDS="${PIDS:+${PIDS},}${P2}"
+
 timeout 3 /usr/bin/busctl --user call org.vigia.Watcher /org/vigia/Watcher \
-  org.vigia.Watcher Report sssss claude "${SID}" "${STATE}" "${TITLE}" "${MSG}" \
+  org.vigia.Watcher Report ssssss claude "${SID}" "${STATE}" "${TITLE}" "${MSG}" "${PIDS}" \
   >/dev/null 2>&1
 
 exit 0

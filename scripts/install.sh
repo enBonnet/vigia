@@ -25,8 +25,12 @@ install -m 755 "$ROOT/hooks/vigia-claude.sh" "$BIN_DIR/vigia-claude.sh"
 echo "→ Merging hooks into Claude Code settings (additive, backup kept)"
 python3 "$ROOT/scripts/claude_hooks.py" merge
 
-echo "→ Installing and starting the vigia daemon"
-sed "s|%ROOT%|$ROOT|g" "$ROOT/daemon/vigia.service" > "$UNIT_DIR/vigia.service"
+echo "→ Installing the daemon"
+VIGIA_DIR="$DATA/vigia"
+install -Dm755 "$ROOT/daemon/vigiad.py" "$VIGIA_DIR/vigiad.py"
+# Run from the installed copy, not the repo: moving or deleting the checkout
+# must not break the service.
+sed "s|%VIGIA_DIR%|$VIGIA_DIR|g" "$ROOT/daemon/vigia.service" > "$UNIT_DIR/vigia.service"
 systemctl --user daemon-reload
 systemctl --user enable --now vigia.service
 
@@ -39,7 +43,16 @@ import ast, subprocess, sys
 uuid = sys.argv[1]
 out = subprocess.run(['gsettings','get','org.gnome.shell','enabled-extensions'],
                      capture_output=True, text=True).stdout.strip()
-exts = ast.literal_eval(out) if out else []
+# gsettings prints an empty array at its default as '@as []' — strip the type
+# hint or literal_eval raises ValueError.
+if out.startswith('@as'):
+    out = out[3:].strip()
+try:
+    exts = ast.literal_eval(out) if out else []
+except (ValueError, SyntaxError):
+    exts = []
+if not isinstance(exts, list):
+    exts = []
 if uuid not in exts:
     exts.append(uuid)
     subprocess.run(['gsettings','set','org.gnome.shell','enabled-extensions',

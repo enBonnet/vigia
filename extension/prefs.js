@@ -1,20 +1,21 @@
 // VigIA — preferences window
+//
+// GNOME 47+ contract: the shell's prefs dialog instantiates the default
+// export with the extension's metadata ({...metadata, dir, path}) and then
+// awaits fillPreferencesWindow(dialogWindow). Extending ExtensionPreferences
+// gives us getSettings() from metadata['settings-schema'].
 
 import Adw from 'gi://Adw';
-import GObject from 'gi://GObject';
 import Gio from 'gi://Gio';
 
-export default class VigiaPreferences extends Adw.PreferencesWindow {
-    static {
-        GObject.registerClass(this);
-    }
+import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
-    constructor(extension) {
-        super({});
-        this._settings = extension.getSettings();
+export default class VigiaPreferences extends ExtensionPreferences {
+    fillPreferencesWindow(window) {
+        const settings = this.getSettings();
 
         const page = new Adw.PreferencesPage();
-        this.add(page);
+        window.add(page);
 
         // ---- general --------------------------------------------------
         const general = new Adw.PreferencesGroup({title: 'General'});
@@ -28,7 +29,7 @@ export default class VigiaPreferences extends Adw.PreferencesWindow {
 
         const keepAwake = new Adw.SwitchRow({
             title: 'Keep computer awake while agents work',
-            subtitle: 'Inhibits screen blanking and suspend while any agent is busy or waiting for you',
+            subtitle: 'Ignores the lid, blocks idle sleep and auto-suspend on AC and battery. Releases automatically on critically low battery after stopping the agents',
         });
         general.add(keepAwake);
 
@@ -37,9 +38,9 @@ export default class VigiaPreferences extends Adw.PreferencesWindow {
         fade.subtitle = 'After this, a finished agent dims back in the top bar';
         general.add(fade);
 
-        this._settings.bind('show-idle', showIdle, 'active', Gio.SettingsBindFlags.DEFAULT);
-        this._settings.bind('keep-awake', keepAwake, 'active', Gio.SettingsBindFlags.DEFAULT);
-        this._settings.bind('done-fade-seconds', fade, 'value', Gio.SettingsBindFlags.DEFAULT);
+        settings.bind('show-idle', showIdle, 'active', Gio.SettingsBindFlags.DEFAULT);
+        settings.bind('keep-awake', keepAwake, 'active', Gio.SettingsBindFlags.DEFAULT);
+        settings.bind('done-fade-seconds', fade, 'value', Gio.SettingsBindFlags.DEFAULT);
 
         // ---- sources --------------------------------------------------
         const sources = new Adw.PreferencesGroup({
@@ -73,15 +74,17 @@ export default class VigiaPreferences extends Adw.PreferencesWindow {
         poll.title = 'OpenCode poll interval (seconds)';
         sources.add(poll);
 
-        this._settings.bind('source-opencode', oc, 'active', Gio.SettingsBindFlags.DEFAULT);
-        this._settings.bind('source-claude', cc, 'active', Gio.SettingsBindFlags.DEFAULT);
-        this._settings.bind('source-generic', generic, 'active', Gio.SettingsBindFlags.DEFAULT);
-        this._settings.bind('generic-processes', procs, 'text', Gio.SettingsBindFlags.DEFAULT);
-        this._settings.bind('poll-interval', poll, 'value', Gio.SettingsBindFlags.DEFAULT);
+        settings.bind('source-opencode', oc, 'active', Gio.SettingsBindFlags.DEFAULT);
+        settings.bind('source-claude', cc, 'active', Gio.SettingsBindFlags.DEFAULT);
+        settings.bind('source-generic', generic, 'active', Gio.SettingsBindFlags.DEFAULT);
+        settings.bind('generic-processes', procs, 'text', Gio.SettingsBindFlags.DEFAULT);
+        settings.bind('poll-interval', poll, 'value', Gio.SettingsBindFlags.DEFAULT);
 
         // ---- about ----------------------------------------------------
         const about = new Adw.PreferencesGroup({title: 'About'});
         page.add(about);
+        // Note: metadata 'version' (2) is the EGO package version; the About
+        // row and the daemon carry their own product version (1.0).
         about.add(new Adw.ActionRow({
             title: 'VigIA 1.0',
             subtitle: 'The lookout for your AI agents · daemon: systemctl --user status vigia',

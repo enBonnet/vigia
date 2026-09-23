@@ -16,6 +16,7 @@ echo "→ Stopping the daemon"
 systemctl --user disable --now vigia.service 2>/dev/null || true
 rm -f "$UNIT_DIR/vigia.service"
 systemctl --user daemon-reload
+rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/vigia"
 
 echo "→ Removing GNOME extension"
 gnome-extensions disable "$UUID" 2>/dev/null || true

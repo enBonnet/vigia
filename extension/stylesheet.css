@@ -6,7 +6,7 @@
 }
 
 .vigia-agent {
-  spacing: 1px;
+  spacing: 2px;
 }
 
 /* working agents pulse between these two phases (JS toggles the class) */
@@ -22,15 +22,18 @@
   transition-duration: 300ms;
 }
 
-.vigia-badge {
-  font-size: 9px;
-  font-weight: 700;
+/* state glyphs (menu rows + panel mini-badges): colors tint symbolic icons */
+.vigia-state-busy {
+  color: #ffffff;
 }
-.vigia-badge-q {
+.vigia-state-question {
   color: #f6d32d;
 }
-.vigia-badge-d {
+.vigia-state-done {
   color: #33d17a;
+}
+.vigia-state-idle {
+  opacity: 0.55;
 }
 
 /* menu */
@@ -44,23 +47,6 @@
 .vigia-row-sub {
   opacity: 0.6;
   font-size: 0.85em;
-}
-.vigia-state {
-  font-weight: 700;
-}
-.vigia-state-busy {
-  color: #ffffff;
-  font-weight: 700;
-}
-.vigia-state-question {
-  color: #f6d32d;
-  font-weight: 700;
-}
-.vigia-state-done {
-  color: #33d17a;
-}
-.vigia-state-idle {
-  opacity: 0.55;
 }
 .vigia-age {
   opacity: 0.5;

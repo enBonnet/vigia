@@ -5,9 +5,9 @@ in the top bar **which** AI coding agent is working, **which** one needs you, an
 **which** one just finished — and keeps the machine awake while they work.
 
 ```
-Top bar:   ⌁ ✳! ⬡✓          ⌁ OpenCode working (pulsing)
-             │ │ └─ Codex done (green ✓, fades)   ✳ Claude Code waiting on you (yellow !)
-             │ └─── ...                           ⬡ Codex done
+Top bar:   ▣ ✳? ⌾✓          ▣ OpenCode working (pulsing)
+             │ │ └─ Codex done (green ✓, fades)   ✳ Claude Code needs you (yellow ?)
+             │ └─── ...                           ⌾ Codex done
              └───── OpenCode busy
 ```
 
@@ -20,10 +20,18 @@ Top bar:   ⌁ ✳! ⬡✓          ⌁ OpenCode working (pulsing)
 | Codex, aider, goose, … | ✅ | — | — | `/proc` scan of process names |
 
 **Keep awake:** while any agent is *working* or *waiting on you*, VigIA holds a
-logind `idle:sleep` **block inhibitor** (enforced by systemd-logind, works on AC
-and battery alike — GNOME 50 removed the old session-manager inhibit) and
-pauses screen blanking for the duration, restoring your original settings when
-everything goes idle. Toggleable in the menu.
+logind `idle:sleep:handle-lid-switch` **block inhibitor** (enforced by
+systemd-logind, works on AC and battery alike — GNOME 50 removed the old
+session-manager inhibit) and pauses screen blanking for the duration,
+restoring your original settings when everything goes idle. The lid is
+irrelevant: closed or open, the machine stays on. Toggleable in the menu.
+
+**Critical battery — the only surrender:** when the battery hits the
+*critically low* level (watched via UPower), VigIA stops your agents for you —
+OpenCode turns are interrupted via its API, Claude Code sessions get a graceful
+SIGINT (their `Stop` hooks report normally), generic agents are terminated —
+releases the keep-awake hold and shows a notification explaining exactly what
+was stopped. Plug the charger back in and keep working.
 
 ## Install
 
@@ -66,9 +74,10 @@ Uninstall: `./scripts/uninstall.sh` (removes only its own hook entries).
                                          └─────────────────────┘
 ```
 
-The extension never does blocking I/O inside GNOME Shell — all watching happens
-in the daemon; the extension only listens to D-Bus signals and manages the
-inhibitor.
+All watching happens in the daemon; the extension only listens to D-Bus
+signals and manages the inhibitor. Its own D-Bus calls are synchronous but
+short and bounded (the daemon answers `List` immediately; inhibit/UPower setup
+happens once per state change).
 
 ### D-Bus API (`org.vigia.Watcher`, `/org/vigia/Watcher`)
 
@@ -78,7 +87,7 @@ busctl --user call org.vigia.Watcher /org/vigia/Watcher org.vigia.Watcher List
 
 # simulate a Claude Code hook (what vigia-claude.sh does)
 busctl --user call org.vigia.Watcher /org/vigia/Watcher org.vigia.Watcher Report \
-  sssss claude test-session busy myproject ""
+  ssssss claude test-session busy myproject "" ""
 ```
 
 Agent ids: `opencode:<sessionID>`, `claude:<sessionID>`, `proc:<name>`.
@@ -86,12 +95,18 @@ States: `idle` · `busy` · `question` · `done`.
 
 ### State rules
 
-- **OpenCode**: busy while `time.updated > time.idle` on the session; pending
-  rows in `permission.request.list` → `question`; finished sessions → `done`
-  flash, then idle.
+- **OpenCode**: busy comes straight from the server's own `session.active`
+  list — a session is working exactly while it has a run in flight, so dead
+  or aborted sessions never linger. When a run ends, a working session
+  flashes green `done` and is dropped; it never sits as an idle row. Pending
+  rows in `permission.request.list` → `question`. Subagent sessions
+  (`@explore`/`@review`…) only appear while busy or asking.
 - **Claude Code**: `UserPromptSubmit`/`Pre*ToolUse` → busy · `Notification`,
   `PermissionRequest` → question · `Stop` → done · `SessionEnd` → removed.
-  Crash-safe: stale busy decays to idle after 30 min.
+  Crash-safe twice over: if every PID the hook reported is gone, the entry is
+  dropped within seconds (any state); stale busy decays to idle after 30 min
+  as a fallback for reports without PIDs. `done` flashes green then drops,
+  like OpenCode.
 - **Generic**: busy while a matching process exists.
 
 ## Settings
@@ -117,13 +132,28 @@ Extension logs: `journalctl --user -u org.gnome.Shell@wayland.service | grep vig
 
 ## Icon language
 
-| Glyph | Agent |
-|---|---|
-| `>_` chevron+underscore | OpenCode |
-| ✳ six-arm sparkle | Claude Code |
-| ⬡ hexagon dot | Codex |
-| robot head | any other agent |
-| eye | VigIA itself (idle/brand) |
+Agent glyphs are the real brand marks, tinted by the state color:
 
-States: pulsing = working · yellow `!` = needs you · green `✓` = done (dims
-after N seconds) · dimmed = idle.
+| Glyph | Agent | Source |
+|---|---|---|
+| ▣ square frame | OpenCode | simple-icons `opencode` |
+| ✳ starburst | Claude Code | simple-icons `claude` |
+| ⌾ knot | Codex | simple-icons `openai` — the ChatGPT mark |
+| ✦ ▲ ⧉ 〜 ✳︎ | gemini · cursor(-agent) · copilot · windsurf · cline | simple-icons |
+| robot head | any other agent (fallback) | hand-drawn |
+| eye | VigIA itself (idle/brand) | hand-drawn |
+
+States: pulsing = working · yellow `?` = needs you · green `✓` = done (dims
+after N seconds) · dimmed = idle. Menu rows show a status glyph instead of
+text: shovel = working · `?` = needs you · `✓` = done · `zzz` = idle.
+
+## Credits
+
+- Agent marks from [Simple Icons](https://simpleicons.org) (CC0). The logos
+  remain trademarks of their owners; used here to indicate which agent is
+  running.
+- `shovel` and `sleep` status glyphs from
+  [Pictogrammers Material Design Icons](https://pictogrammers.com)
+  (Apache-2.0).
+- Refresh the imported glyphs with `./scripts/fetch-icons.sh`; the robot and
+  the eye are hand-drawn and untouched by it.

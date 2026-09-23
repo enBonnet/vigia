@@ -11,17 +11,23 @@ session D-Bus for the VigIA GNOME Shell extension:
   methods:
     Ping()                          -> s
     List()                          -> s   (JSON snapshot of all agents)
-    Report(agent, session, state, title, detail) -> b   (hook ingest)
+    Report(agent, session, state, title, detail, pids) -> b  (hook ingest)
 
   signals:
     AgentChanged(s id, s json)
     AgentGone(s id)
 
 Sources:
-  * OpenCode   — polls `opencode api session.list` + `permission.request.list`.
-                 A session is busy while time.updated > time.idle; pending
-                 entries in permission.request.list mark it as "question".
+  * OpenCode   — polls `opencode api session.list` + `permission.request.list`
+                 + `session.active`. Busy comes straight from the server's own
+                 active-run list; when a run ends, working sessions flash
+                 "done" and are dropped. Pending permission entries mark
+                 "question". If the API is unreachable, state is kept (or
+                 demoted to idle on a total outage).
   * Claude Code — receives state pushed by the vigia-claude.sh hook reporter.
+                 Entries whose reported PIDs are all gone are dropped within
+                 seconds (any state); "done" flashes briefly, then the entry
+                 is dropped.
   * Generic     — /proc scan of configured process names (busy while alive).
 
 States: idle | busy | question | done
@@ -29,6 +35,7 @@ States: idle | busy | question | done
 
 import json
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -57,7 +64,12 @@ NODE_XML = f"""<node>
       <arg name="state" direction="in" type="s"/>
       <arg name="title" direction="in" type="s"/>
       <arg name="detail" direction="in" type="s"/>
+      <arg name="pids" direction="in" type="s"/>
       <arg name="ok" direction="out" type="b"/>
+    </method>
+    <method name="StopAll">
+      <arg name="reason" direction="in" type="s"/>
+      <arg name="summary" direction="out" type="s"/>
     </method>
     <signal name="AgentChanged">
       <arg name="id" type="s"/>
@@ -66,15 +78,13 @@ NODE_XML = f"""<node>
     <signal name="AgentGone">
       <arg name="id" type="s"/>
     </signal>
-    <property name="Version" type="s" access="read"/>
   </interface>
 </node>"""
 
 # policy knobs
 IDLE_DISPLAY_WINDOW = 1800     # keep idle sessions listed for 30 min
-OC_BUSY_STALE_SECS = 6 * 3600  # opencode busy believed stale only after 6 h
 BUSY_STALE_SECS = 1800         # claude "busy" with no refresh -> idle
-DONE_HOLD_SECS = 120           # "done" stays flagged before decaying to idle
+DONE_HOLD_SECS = 120           # "done" flash: opencode drops, claude -> idle
 QUESTION_MAX_SECS = 12 * 3600  # questions expire after 12 h
 IDLE_TTL = 24 * 3600           # idle claude entries drop after a day
 
@@ -153,7 +163,7 @@ class Vigia:
 
     # ----------------------------------------------------------- agent state
 
-    def upsert(self, agent_id, agent, state, title, detail="", project="", model=""):
+    def upsert(self, agent_id, agent, state, title, detail="", project="", model="", pids=""):
         if state not in VALID_STATES:
             state = "idle"
         now = time.time()
@@ -166,6 +176,7 @@ class Vigia:
             "project": project or "",
             "model": model or "",
             "detail": detail or "",
+            "pids": pids or "",
             "since": since,
             "updated": now,
         }
@@ -222,7 +233,7 @@ class Vigia:
 
     # ------------------------------------------------------- hook ingest API
 
-    def report(self, agent, session, state, title, detail):
+    def report(self, agent, session, state, title, detail, pids=""):
         """Entry point for hook reporters (Claude Code etc.)."""
         if state == "gone":
             self.remove(f"claude:{session or 'default'}")
@@ -233,6 +244,7 @@ class Vigia:
             state,
             title or "Claude Code",
             detail or "",
+            pids=pids or "",
         )
         return True
 
@@ -274,10 +286,29 @@ class Vigia:
             for aid in [a for a in self._agents if a.startswith("opencode:")]:
                 self.remove(aid)
             return
-        sessions = self._oc_api("session.list") or {}
-        perms = self._oc_api("permission.request.list") or {}
+        sessions = self._oc_api("session.list")
+        perms = self._oc_api("permission.request.list")
+        active = self._oc_api("session.active")
+        if sessions is None or active is None:
+            if sessions is None and active is None:
+                # service down entirely: nothing can be running
+                for aid in [a for a in self._agents
+                            if a.startswith("opencode:")
+                            and self._agents[a]["state"] in ("busy", "question")]:
+                    self._transition(aid, "idle")
+                return
+            self.dbg("opencode api partial failure; keeping previous state")
+            return
+        sessions, perms = sessions or {}, perms or {}
         now = time.time()
         seen = set()
+
+        # sessions with a run in flight right now — the server's own,
+        # authoritative busy signal (SessionActive.type is always "running")
+        running = set()
+        for sid, info in (active.get("data") or {}).items():
+            if isinstance(info, dict) and info.get("type") == "running":
+                running.add(str(sid))
 
         ask = set()
         for p in perms.get("data") or []:
@@ -299,20 +330,32 @@ class Vigia:
             sid = str(s.get("id") or "")
             if not sid:
                 continue
+            aid = f"opencode:{sid}"
+
+            busy = sid in running
+            question = sid in ask or f"project:{s.get('projectID') or ''}" in ask
+            state = "question" if question else ("busy" if busy else "idle")
+
+            old = self._agents.get(aid)
+            if state == "idle" and old:
+                if old["state"] in ("busy", "question"):
+                    # the run just ended (or the process died) — green "done"
+                    # flash; age_out drops the entry shortly after
+                    self._transition(aid, "done")
+                seen.add(aid)  # done entries are kept until age_out drops them
+                continue
+
+            # subagent sessions (@explore/@review/…) only matter while active
             t = s.get("time") or {}
             updated = (t.get("updated") or 0) / 1000.0
             idle = t.get("idle")
-            idle = idle / 1000.0 if idle else 0.0
-            busy = updated > idle and updated > now - OC_BUSY_STALE_SECS
-
-            aid = f"opencode:{sid}"
-            if not busy and updated < now - IDLE_DISPLAY_WINDOW:
+            idle_ts = idle / 1000.0 if idle else 0.0
+            if state == "idle" and (
+                    bool(s.get("parentID"))
+                    or max(updated, idle_ts) < now - IDLE_DISPLAY_WINDOW):
                 self.remove(aid)
                 continue
 
-            state = "busy" if busy else "idle"
-            if sid in ask or f"project:{s.get('projectID') or ''}" in ask:
-                state = "question"
             model = s.get("model")
             model = model.get("id") if isinstance(model, dict) else None
             self.upsert(
@@ -339,7 +382,7 @@ class Vigia:
         names = {n.strip() for n in raw.split(",") if n.strip()}
         if not names:
             return
-        counts = {}
+        pids_by_name = {}
         for pid in os.listdir("/proc"):
             if not pid.isdigit():
                 continue
@@ -349,12 +392,15 @@ class Vigia:
             except OSError:
                 continue
             if comm in names:
-                counts[comm] = counts.get(comm, 0) + 1
+                pids_by_name.setdefault(comm, []).append(int(pid))
         for name in names:
             aid = f"proc:{name}"
-            n = counts.get(name, 0)
-            if n:
-                self.upsert(aid, name, "busy", name, f"{n} process{'es' if n > 1 else ''} running")
+            found = pids_by_name.get(name, [])
+            if found:
+                n = len(found)
+                self.upsert(aid, name, "busy", name,
+                            f"{n} process{'es' if n > 1 else ''} running",
+                            pids=",".join(str(p) for p in found))
             else:
                 self.remove(aid)
         # drop entries whose process name is no longer configured
@@ -362,16 +408,77 @@ class Vigia:
             if aid[5:] not in names:
                 self.remove(aid)
 
+    def _oc_interrupt(self, session_id):
+        """Gracefully stop the current OpenCode turn (POST /session/:id/interrupt)."""
+        if not self._oc_bin:
+            return False
+        try:
+            out = subprocess.run(
+                [self._oc_bin, "api", "session.interrupt",
+                 "--param", f"sessionID={session_id}"],
+                capture_output=True, text=True, timeout=15)
+            return out.returncode == 0
+        except Exception as exc:
+            self.dbg(f"interrupt {session_id} failed: {exc}")
+            return False
+
+    def stop_all(self, reason):
+        """Emergency stop: interrupt/terminate every working agent."""
+        summary = {"reason": reason, "stopped": {"opencode": [], "claude": [], "generic": []}, "failed": []}
+        stopped, failed = summary["stopped"], summary["failed"]
+        for aid, e in list(self._agents.items()):
+            if e["state"] not in ("busy", "question"):
+                continue
+            if e["agent"] == "opencode":
+                sid = aid.split(":", 1)[1]
+                ok = self._oc_interrupt(sid)
+                (stopped["opencode"] if ok else failed).append({"id": sid, "title": e["title"]})
+                continue
+            pids = [int(p) for p in (e.get("pids") or "").split(",") if p.strip().isdigit()]
+            killed = []
+            for pid in pids:
+                try:
+                    if e["agent"] == "claude":
+                        # graceful interrupt of the CLI process (its Stop hook then reports)
+                        with open(f"/proc/{pid}/comm") as f:
+                            if f.read().strip() != "claude":
+                                continue
+                        os.kill(pid, signal.SIGINT)
+                    else:
+                        os.kill(pid, signal.SIGTERM)
+                    killed.append(pid)
+                except (OSError, ValueError):
+                    continue
+            bucket = "claude" if e["agent"] == "claude" else "generic"
+            (stopped[bucket] if killed else failed).append(
+                {"id": aid, "title": e["title"], "pids": killed})
+        self.log(f"stop_all({reason}): {json.dumps(summary)}")
+        return summary
+
     # -------------------------------------------------------------- aging
 
     def age_out(self):
         now = time.time()
         for aid, e in list(self._agents.items()):
+            st = e["state"]
+            if e["agent"] == "opencode":
+                # finished flash, then drop — no lingering idle rows
+                if st == "done" and now - e["since"] > DONE_HOLD_SECS:
+                    self.remove(aid)
+                continue
             if e["agent"] != "claude":
                 continue
-            st = e["state"]
+            # hooks tell us which processes belong to a session: if they are
+            # all gone the session is over, whatever the last hook said
+            pids = [p for p in (e.get("pids") or "").split(",")
+                    if p.strip().isdigit()]
+            if pids and all(not os.path.exists(f"/proc/{p.strip()}")
+                            for p in pids):
+                self.dbg(f"{aid} pids gone -> remove")
+                self.remove(aid)
+                continue
             if st == "done" and now - e["since"] > DONE_HOLD_SECS:
-                self._transition(aid, "idle")
+                self.remove(aid)  # flash over — drop, like opencode
             elif st == "busy" and now - e["updated"] > BUSY_STALE_SECS:
                 self._transition(aid, "idle")
             elif st == "question" and now - e["since"] > QUESTION_MAX_SECS:
@@ -399,15 +506,26 @@ class Vigia:
                 payload = json.dumps({"version": VERSION, "agents": self._agents})
                 invocation.return_value(GLib.Variant("(s)", (payload,)))
             elif method == "Report":
-                agent, session, state, title, detail = params.unpack()
-                ok = self.report(agent, session, state, title, detail)
+                agent, session, state, title, detail, pids = params.unpack()
+                ok = self.report(agent, session, state, title, detail, pids)
                 invocation.return_value(GLib.Variant("(b)", (ok,)))
+            elif method == "StopAll":
+                (reason,) = params.unpack()
+                summary = self.stop_all(reason)
+                invocation.return_value(GLib.Variant("(s)", (json.dumps(summary),)))
             else:
                 invocation.return_error(
                     Gio.DBusError.new_for_dbus_error("org.freedesktop.DBus.Error.UnknownMethod", "no such method")
                 )
         except Exception as exc:
             self.dbg(f"method {method} failed: {exc}")
+            # Always reply, even on failure: an unanswered invocation leaves the
+            # caller waiting out its full timeout.
+            try:
+                invocation.return_error(Gio.DBusError.new_for_dbus_error(
+                    "org.freedesktop.DBus.Error.Failed", str(exc)))
+            except Exception:
+                pass
 
     # ---------------------------------------------------------------- main
 
