@@ -20,9 +20,10 @@ Top bar:   ⌁ ✳! ⬡✓          ⌁ OpenCode working (pulsing)
 | Codex, aider, goose, … | ✅ | — | — | `/proc` scan of process names |
 
 **Keep awake:** while any agent is *working* or *waiting on you*, VigIA holds a
-GNOME session inhibitor (same mechanism as Caffeine) so the screen doesn't
-blank and the machine doesn't suspend. Released automatically when everything
-goes idle. Toggleable in the menu.
+logind `idle:sleep` **block inhibitor** (enforced by systemd-logind, works on AC
+and battery alike — GNOME 50 removed the old session-manager inhibit) and
+pauses screen blanking for the duration, restoring your original settings when
+everything goes idle. Toggleable in the menu.
 
 ## Install
 
@@ -52,8 +53,8 @@ Uninstall: `./scripts/uninstall.sh` (removes only its own hook entries).
 │                      │  AgentGone       │                             │
 │  • OpenCode poller   │                  │  • per-agent panel icons    │
 │    (opencode api)    │                  │  • popup menu w/ details    │
-│  • Claude hook       │                  │  • keep-awake inhibitor     │
-│    ingest (Report)   │                  │    (org.gnome.SessionManager)│
+│  • Claude hook       │                  │  • keep-awake: logind block  │
+│    ingest (Report)   │                  │    inhibitor + blank hold    │
 │  • /proc scan        │                  │                             │
 └──────────────────────┘                  └─────────────────────────────┘
         ▲                                           ▲

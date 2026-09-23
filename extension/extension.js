@@ -17,9 +17,12 @@ const BUS_NAME = 'org.vigia.Watcher';
 const OBJ_PATH = '/org/vigia/Watcher';
 const IFACE = 'org.vigia.Watcher';
 
-// org.gnome.SessionManager.Inhibit flags — same values Caffeine uses
-// (prevents screen blanking and suspend).
-const INHIBIT_FLAGS = 12;
+// Keep-awake implementation (GNOME 50 dropped org.gnome.SessionManager, so
+// the classic Caffeine-style inhibit is gone). VigIA instead:
+//   1. holds a logind "idle:sleep" block inhibitor — enforced by
+//      systemd-logind itself, works on AC and battery alike;
+//   2. holds the screen blank by setting org.gnome.desktop.session
+//      idle-delay to 0 for the duration (original value restored on release).
 
 const STATE_ORDER = {busy: 0, question: 1, done: 2, idle: 3};
 const STATE_COLOR = {busy: null, question: '#f6d32d', done: '#33d17a', idle: null};
@@ -53,7 +56,9 @@ class VigiaIndicator extends PanelMenu.Button {
         this._pulseOn = false;
         this._fadedDone = new Set();
         this._fadeTimeouts = new Map();
-        this._cookie = null;
+        this._logindFd = null;
+        this._savedIdleDelay = null;
+        this._inhibited = false;
         this._proxy = null;
         this._sigId = null;
         this._ownerId = null;
@@ -378,39 +383,79 @@ class VigiaIndicator extends PanelMenu.Button {
 
     // ------------------------------------------------------- keep awake
 
-    _ensureSessionProxy() {
-        if (this._session || this._sessionFailed)
+    _ensureSystemBus() {
+        if (this._systemBus || this._systemBusFailed)
             return;
         try {
-            this._session = Gio.DBusProxy.new_for_bus_sync(
-                Gio.BusType.SESSION, Gio.DBusProxyFlags.DO_NOT_AUTO_START,
-                null, 'org.gnome.SessionManager', '/org/gnome/SessionManager',
-                'org.gnome.SessionManager', null);
+            this._systemBus = Gio.bus_get_sync(Gio.BusType.SYSTEM, null);
         } catch (e) {
-            log(`vigia: no session manager, keep-awake disabled: ${e}`);
-            this._sessionFailed = true;
+            log(`vigia: no system bus, keep-awake disabled: ${e}`);
+            this._systemBusFailed = true;
         }
+    }
+
+    _takeLogindInhibit() {
+        if (this._logindFd != null)
+            return;
+        try {
+            const [res, fdList] = this._systemBus.call_with_unix_fd_list_sync(
+                'org.freedesktop.login1', '/org/freedesktop/login1',
+                'org.freedesktop.login1.Manager', 'Inhibit',
+                new GLib.Variant('(ssss)',
+                    ['idle:sleep', 'VigIA', 'AI agent working', 'block']),
+                null, Gio.DBusCallFlags.NONE, -1, null, null);
+            const [idx] = res.deepUnpack();
+            this._logindFd = fdList.get(idx);
+        } catch (e) {
+            log(`vigia: logind inhibit failed: ${e}`);
+        }
+    }
+
+    _releaseLogindInhibit() {
+        if (this._logindFd == null)
+            return;
+        try {
+            GLib.close(this._logindFd);
+        } catch (e) { /* already closed */ }
+        this._logindFd = null;
+    }
+
+    _takeBlankHold() {
+        if (!this._idleDelaySettings) {
+            try {
+                this._idleDelaySettings =
+                    new Gio.Settings({schema_id: 'org.gnome.desktop.session'});
+            } catch (e) {
+                return;
+            }
+        }
+        if (this._savedIdleDelay == null)
+            this._savedIdleDelay = this._idleDelaySettings.get_uint('idle-delay');
+        this._idleDelaySettings.set_uint('idle-delay', 0);
+    }
+
+    _releaseBlankHold() {
+        if (this._savedIdleDelay == null)
+            return;
+        this._idleDelaySettings.set_uint('idle-delay', this._savedIdleDelay);
+        this._savedIdleDelay = null;
     }
 
     _updateInhibit() {
         const want = this._settings.get_boolean('keep-awake') &&
             this._sorted().some(e => e.state === 'busy' || e.state === 'question');
-        this._ensureSessionProxy();
-        if (!this._session)
+        if (want === this._inhibited)
             return;
-        if (want && this._cookie == null) {
-            this._session.InhibitRemote('VigIA', 0, 'AI agent working', INHIBIT_FLAGS,
-                res => {
-                    try {
-                        const [cookie] = res;
-                        this._cookie = cookie;
-                    } catch (e) {
-                        log(`vigia: inhibit failed: ${e}`);
-                    }
-                });
-        } else if (!want && this._cookie != null) {
-            this._session.UninhibitRemote(this._cookie);
-            this._cookie = null;
+        this._ensureSystemBus();
+        if (!this._systemBus)
+            return;
+        this._inhibited = want;
+        if (want) {
+            this._takeLogindInhibit();
+            this._takeBlankHold();
+        } else {
+            this._releaseLogindInhibit();
+            this._releaseBlankHold();
         }
     }
 
@@ -445,13 +490,10 @@ class VigiaIndicator extends PanelMenu.Button {
             GLib.source_remove(src);
         this._fadeTimeouts.clear();
 
-        // never leave an inhibitor behind
-        if (this._cookie != null && this._session) {
-            try {
-                this._session.UninhibitRemote(this._cookie);
-            } catch (e) { /* session is going away anyway */ }
-            this._cookie = null;
-        }
+        // release the inhibitor and blank hold — never leak them
+        this._releaseLogindInhibit();
+        this._releaseBlankHold();
+        this._inhibited = false;
         super.destroy();
     }
 });
