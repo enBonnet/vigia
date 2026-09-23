@@ -34,7 +34,7 @@ cd ~/projects/personal/vigia
 Then restart GNOME Shell (X11: `Alt+F2` → `r` → Enter · Wayland: log out/in).
 The installer:
 
-1. installs the extension to `~/.local/share/gnome-shell/extensions/vigia@enbonnet/`
+1. installs the extension to `~/.local/share/gnome-shell/extensions/vigia@enbonnet.github.com/`
 2. registers the settings schema
 3. installs the hook reporter to `~/.local/bin/vigia-claude.sh`
 4. **additively** merges hooks into `~/.claude/settings.json`

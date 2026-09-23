@@ -1,5 +1,5 @@
 {
-  "uuid": "vigia@enbonnet",
+  "uuid": "vigia@enbonnet.github.com",
   "name": "Vigía",
   "description": "Top-bar lookout for AI coding agents (OpenCode, Claude Code, Codex…): see who is working, who needs you, who is done — and keep the machine awake while they work.",
   "shell-version": ["45", "46", "47", "48", "49", "50"],

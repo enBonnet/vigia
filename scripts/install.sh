@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-UUID="vigia@enbonnet"
+UUID="vigia@enbonnet.github.com"
 DATA="${XDG_DATA_HOME:-$HOME/.local/share}"
 EXT_DIR="$DATA/gnome-shell/extensions/$UUID"
 SCHEMA_DIR="$DATA/glib-2.0/schemas"
