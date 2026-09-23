@@ -32,6 +32,19 @@ systemctl --user enable --now vigia.service
 
 echo "→ Enabling GNOME extension"
 gnome-extensions enable "$UUID" 2>/dev/null || true
+# gnome-extensions can't enable what the running shell hasn't scanned yet —
+# persist it in gsettings so it loads on the next login regardless.
+python3 - "$UUID" <<'PYEOF'
+import ast, subprocess, sys
+uuid = sys.argv[1]
+out = subprocess.run(['gsettings','get','org.gnome.shell','enabled-extensions'],
+                     capture_output=True, text=True).stdout.strip()
+exts = ast.literal_eval(out) if out else []
+if uuid not in exts:
+    exts.append(uuid)
+    subprocess.run(['gsettings','set','org.gnome.shell','enabled-extensions',
+                    '[' + ', '.join(f"'{e}'" for e in exts) + ']'], check=True)
+PYEOF
 
 cat <<EOF
 
