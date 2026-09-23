@@ -1,4 +1,4 @@
-// Vigía — GNOME Shell extension
+// VigIA — GNOME Shell extension
 // Top-bar lookout for AI coding agents: per-agent icons showing who is
 // working, who needs you, who just finished — plus optional keep-awake.
 
@@ -44,7 +44,7 @@ function formatAge(seconds) {
 const VigiaIndicator = GObject.registerClass(
 class VigiaIndicator extends PanelMenu.Button {
     _init(extension) {
-        super._init(0.0, 'Vigía', false);
+        super._init(0.0, 'VigIA', false);
         this._extension = extension;
         this._settings = extension.getSettings();
         this._agents = {};
@@ -101,7 +101,7 @@ class VigiaIndicator extends PanelMenu.Button {
             y_align: Clutter.ActorAlign.CENTER,
         });
         this._headerTitle = new St.Label({
-            text: 'Vigía', style_class: 'vigia-row-title',
+            text: 'VigIA', style_class: 'vigia-row-title',
             y_align: Clutter.ActorAlign.CENTER,
         });
         this._headerStatus = new St.Label({
@@ -127,7 +127,7 @@ class VigiaIndicator extends PanelMenu.Button {
         });
         this.menu.addMenuItem(this._awakeSwitch);
 
-        const prefs = new PopupMenu.PopupMenuItem('Vigía Preferences…');
+        const prefs = new PopupMenu.PopupMenuItem('VigIA Preferences…');
         prefs.connect('activate', () => this._extension.openPreferences());
         this.menu.addMenuItem(prefs);
     }
@@ -399,7 +399,7 @@ class VigiaIndicator extends PanelMenu.Button {
         if (!this._session)
             return;
         if (want && this._cookie == null) {
-            this._session.InhibitRemote('Vigía', 0, 'AI agent working', INHIBIT_FLAGS,
+            this._session.InhibitRemote('VigIA', 0, 'AI agent working', INHIBIT_FLAGS,
                 res => {
                     try {
                         const [cookie] = res;

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Vigía reporter for Claude Code hooks.
+# VigIA reporter for Claude Code hooks.
 # Reads the hook JSON from stdin and forwards the state to vigiad over D-Bus.
 # Best-effort by design: never fails, never blocks longer than ~3s.
 

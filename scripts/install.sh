@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Vigía installer: extension, schemas, hook script, Claude hook merge, daemon.
+# VigIA installer: extension, schemas, hook script, Claude hook merge, daemon.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -48,7 +48,7 @@ PYEOF
 
 cat <<EOF
 
-✔ Vigía installed.
+✔ VigIA installed.
 
   Daemon:        systemctl --user status vigia
   Live state:    busctl --user call org.vigia.Watcher /org/vigia/Watcher org.vigia.Watcher List

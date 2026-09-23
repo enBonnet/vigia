@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Merge/unmerge Vigía hooks into Claude Code's ~/.claude/settings.json.
+Merge/unmerge VigIA hooks into Claude Code's ~/.claude/settings.json.
 
 Strictly additive: existing entries (e.g. Orca's hooks) are never touched.
 A timestamped backup is written on first merge; writes are atomic.

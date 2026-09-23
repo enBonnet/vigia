@@ -1,4 +1,4 @@
-// Vigía — preferences window
+// VigIA — preferences window
 
 import Adw from 'gi://Adw';
 import GObject from 'gi://GObject';
@@ -83,7 +83,7 @@ export default class VigiaPreferences extends Adw.PreferencesWindow {
         const about = new Adw.PreferencesGroup({title: 'About'});
         page.add(about);
         about.add(new Adw.ActionRow({
-            title: 'Vigía 1.0',
+            title: 'VigIA 1.0',
             subtitle: 'The lookout for your AI agents · daemon: systemctl --user status vigia',
         }));
     }

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Vigía uninstaller — removes everything install.sh added.
+# VigIA uninstaller — removes everything install.sh added.
 set -euo pipefail
 
 UUID="vigia@enbonnet.github.com"
@@ -25,5 +25,5 @@ glib-compile-schemas "$SCHEMA_DIR" 2>/dev/null || true
 
 rm -f "$HOME/.local/bin/vigia-claude.sh"
 
-echo "✔ Vigía uninstalled. Restart GNOME Shell to drop the indicator."
+echo "✔ VigIA uninstalled. Restart GNOME Shell to drop the indicator."
 echo "  (The Claude Code backup is kept at ~/.claude/settings.json.vigia.bak)"

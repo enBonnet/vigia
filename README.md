@@ -1,6 +1,6 @@
-# Vigía
+# VigIA
 
-*The lookout for your AI agents.* A GNOME Shell extension + tiny daemon that shows
+*Vig-**IA**: the IA that keeps watch.* A GNOME Shell extension + tiny daemon that shows
 in the top bar **which** AI coding agent is working, **which** one needs you, and
 **which** one just finished — and keeps the machine awake while they work.
 
@@ -19,7 +19,7 @@ Top bar:   ⌁ ✳! ⬡✓          ⌁ OpenCode working (pulsing)
 | Claude Code | ✅ | ✅ (`Notification`, `PermissionRequest` hooks) | ✅ (`Stop` hook) | Hook reporter pushed over D-Bus |
 | Codex, aider, goose, … | ✅ | — | — | `/proc` scan of process names |
 
-**Keep awake:** while any agent is *working* or *waiting on you*, Vigía holds a
+**Keep awake:** while any agent is *working* or *waiting on you*, VigIA holds a
 GNOME session inhibitor (same mechanism as Caffeine) so the screen doesn't
 blank and the machine doesn't suspend. Released automatically when everything
 goes idle. Toggleable in the menu.
@@ -47,7 +47,7 @@ Uninstall: `./scripts/uninstall.sh` (removes only its own hook entries).
 
 ```
 ┌──────────────────────┐  D-Bus signals   ┌─────────────────────────────┐
-│  vigiad (systemd     │ ───────────────▶ │  Vigía GNOME Shell          │
+│  vigiad (systemd     │ ───────────────▶ │  VigIA GNOME Shell          │
 │  --user service)     │  AgentChanged /  │  extension                  │
 │                      │  AgentGone       │                             │
 │  • OpenCode poller   │                  │  • per-agent panel icons    │
@@ -95,7 +95,7 @@ States: `idle` · `busy` · `question` · `done`.
 
 ## Settings
 
-Preferences (extension menu → *Vigía Preferences…*): per-source toggles,
+Preferences (extension menu → *VigIA Preferences…*): per-source toggles,
 generic process list, OpenCode poll interval, done-badge fade seconds,
 show-when-idle, keep-awake. Stored in
 `org.gnome.shell.extensions.vigia` (the daemon reads the same keys live).
@@ -122,7 +122,7 @@ Extension logs: `journalctl --user -u org.gnome.Shell@wayland.service | grep vig
 | ✳ six-arm sparkle | Claude Code |
 | ⬡ hexagon dot | Codex |
 | robot head | any other agent |
-| eye | Vigía itself (idle/brand) |
+| eye | VigIA itself (idle/brand) |
 
 States: pulsing = working · yellow `!` = needs you · green `✓` = done (dims
 after N seconds) · dimmed = idle.

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-vigiad — Vigía agent watcher daemon.
+vigiad — VigIA agent watcher daemon.
 
 Watches AI coding agents on this machine and exposes their state over the
-session D-Bus for the Vigía GNOME Shell extension:
+session D-Bus for the VigIA GNOME Shell extension:
 
   name:   org.vigia.Watcher      object: /org/vigia/Watcher
 
