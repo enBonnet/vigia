@@ -1,6 +1,6 @@
 {
   "uuid": "vigia@enbonnet.github.com",
-  "name": "VigIA",
+  "name": "VigIA - An Eye on Your Agents",
   "description": "Top-bar lookout for AI coding agents (OpenCode, Claude Code, Codex…): see who is working, who needs you, who is done — and keep the machine awake while they work.",
   "shell-version": ["49", "50"],
   "url": "https://github.com/enbonnet/vigia",
