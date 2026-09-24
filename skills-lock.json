@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "gnome-extension-review": {
+      "source": "enBonnet/gnome-extension-review",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "5cfb2154bbad67cee05b663fa16b67f1e7597444e2f4a34fedba4371bb5e1a8d"
+    }
+  }
+}
