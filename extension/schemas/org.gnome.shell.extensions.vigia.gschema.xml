@@ -9,6 +9,10 @@
       <default>true</default>
       <summary>Keep the computer awake while any agent is busy or waiting for you</summary>
     </key>
+    <key name="saved-idle-delay" type="u">
+      <default>0</default>
+      <summary>Internal: idle-delay saved while the blank hold is active; 0 means no hold (crash recovery)</summary>
+    </key>
     <key name="done-fade-seconds" type="i">
       <range min="5" max="60"/>
       <default>10</default>

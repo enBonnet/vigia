@@ -454,34 +454,25 @@ class VigiaIndicator extends PanelMenu.Button {
         this._logindFd = null;
     }
 
-    // The saved idle-delay is persisted to disk for the duration of the hold:
-    // the logind inhibitor self-heals on a shell crash (the fd closes), but a
-    // setting written to 0 would stay 0 forever, disabling blanking permanently.
-    // enable() → _recoverBlankHold() restores the saved value if we crashed.
-    _idleDelayStatePath() {
-        return GLib.build_filenamev([GLib.get_user_state_dir(), 'vigia', 'idle-delay']);
-    }
-
+    // The saved idle-delay is persisted to GSettings for the duration of the
+    // hold: the logind inhibitor self-heals on a shell crash (the fd closes),
+    // but a setting written to 0 would stay 0 forever, disabling blanking
+    // permanently. enable() → _recoverBlankHold() restores the saved value
+    // if we crashed. dconf is written by a separate service process, so the
+    // value survives the shell dying — no state file needed.
     _recoverBlankHold() {
-        let saved = null;
-        try {
-            const [ok, bytes] = GLib.file_get_contents(this._idleDelayStatePath());
-            if (ok)
-                saved = Number.parseInt(new TextDecoder().decode(bytes).trim(), 10);
-        } catch {
-            return;   // no state file: last disable() was clean
-        }
-        try {
-            GLib.unlink(this._idleDelayStatePath());
-        } catch {
-            // best effort
-        }
-        if (!Number.isInteger(saved) || saved <= 0)
-            return;
+        const saved = this._settings.get_uint('saved-idle-delay');
+        if (saved === 0)
+            return;   // last disable() was clean
+        this._settings.set_uint('saved-idle-delay', 0);
         try {
             const settings = new Gio.Settings({schema_id: 'org.gnome.desktop.session'});
-            settings.set_uint('idle-delay', saved);
-            log(`vigia: recovered idle-delay=${saved}s after an unclean shutdown`);
+            // restore only when still zeroed — never clobber a delay the
+            // user set manually after the crash
+            if (settings.get_uint('idle-delay') === 0) {
+                settings.set_uint('idle-delay', saved);
+                log(`vigia: recovered idle-delay=${saved}s after an unclean shutdown`);
+            }
         } catch (e) {
             log(`vigia: could not recover idle-delay: ${e}`);
         }
@@ -498,12 +489,9 @@ class VigiaIndicator extends PanelMenu.Button {
         }
         if (this._savedIdleDelay == null) {
             this._savedIdleDelay = this._idleDelaySettings.get_uint('idle-delay');
-            try {
-                GLib.file_set_contents(this._idleDelayStatePath(),
-                    String(this._savedIdleDelay));
-            } catch (e) {
-                log(`vigia: could not persist idle-delay state: ${e}`);
-            }
+            // persist before zeroing: a crash between the two writes would
+            // otherwise leave blanking disabled forever
+            this._settings.set_uint('saved-idle-delay', this._savedIdleDelay);
         }
         this._idleDelaySettings.set_uint('idle-delay', 0);
     }
@@ -513,11 +501,7 @@ class VigiaIndicator extends PanelMenu.Button {
             return;
         this._idleDelaySettings.set_uint('idle-delay', this._savedIdleDelay);
         this._savedIdleDelay = null;
-        try {
-            GLib.unlink(this._idleDelayStatePath());
-        } catch {
-            // best effort
-        }
+        this._settings.set_uint('saved-idle-delay', 0);
     }
 
     // ------------------------------------------------- critical battery
