@@ -79,6 +79,7 @@ class VigiaIndicator extends PanelMenu.Button {
         this._proxy = null;
         this._sigId = null;
         this._ownerId = null;
+        this._seedCancellable = null;
         this._wasCritical = false;
 
         this._recoverBlankHold();
@@ -390,18 +391,28 @@ class VigiaIndicator extends PanelMenu.Button {
         this._seed();
     }
 
+    // Async on purpose: a sync call with a 2s timeout could freeze the whole
+    // shell while the daemon is stuck. Cancel-before-create mirrors the
+    // timeout pattern — a fresh _seed() retires the previous request, and
+    // destroy() cancels the in-flight one.
     _seed() {
-        try {
-            const res = this._proxy.call_sync('List', null,
-                Gio.DBusCallFlags.NONE, 2000, null);
-            const [payload] = res.deepUnpack();
-            const data = JSON.parse(payload);
-            this._agents = data.agents ?? {};
-            this._daemonOk = true;
-        } catch (e) {
-            this._daemonOk = false;
-        }
-        this._render();
+        if (this._seedCancellable)
+            this._seedCancellable.cancel();
+        this._seedCancellable = new Gio.Cancellable();
+        this._proxy.call('List', null, Gio.DBusCallFlags.NONE, 2000,
+            this._seedCancellable, (proxy, res) => {
+                try {
+                    const [payload] = proxy.call_finish(res).deepUnpack();
+                    const data = JSON.parse(payload);
+                    this._agents = data.agents ?? {};
+                    this._daemonOk = true;
+                } catch (e) {
+                    if (e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
+                        return;
+                    this._daemonOk = false;
+                }
+                this._render();
+            });
     }
 
     _onVanished() {
@@ -580,7 +591,7 @@ class VigiaIndicator extends PanelMenu.Button {
                 } catch (e) {
                     detail = 'Could not stop the agents automatically — check their windows.';
                 }
-                Main.notify('VigIA — battery critically low 🔋',
+                Main.notify('VigIA — battery critically low',
                     `${detail} Keep-awake released so the system can save itself. Plug in the charger to resume.`);
             });
     }
@@ -598,10 +609,14 @@ class VigiaIndicator extends PanelMenu.Button {
         if (want) {
             this._takeLogindInhibit();
             this._takeBlankHold();
-            // logind refused the inhibitor: clear the flag so the next
-            // _updateInhibit() retries instead of assuming we are held
-            if (this._logindFd == null)
+            // logind refused the inhibitor: drop the blank hold too and
+            // clear the flag so the next _updateInhibit() retries instead of
+            // assuming we are held — otherwise a later want=false would hit
+            // the early-return above and never release the hold
+            if (this._logindFd == null) {
                 this._inhibited = false;
+                this._releaseBlankHold();
+            }
         } else {
             this._releaseLogindInhibit();
             this._releaseBlankHold();
@@ -622,6 +637,10 @@ class VigiaIndicator extends PanelMenu.Button {
         if (this._ownerId != null) {
             Gio.bus_unwatch_name(this._ownerId);
             this._ownerId = null;
+        }
+        if (this._seedCancellable) {
+            this._seedCancellable.cancel();
+            this._seedCancellable = null;
         }
         if (this._proxy && this._sigId != null) {
             this._proxy.disconnect(this._sigId);
@@ -658,8 +677,13 @@ export default class VigiaExtension extends Extension {
         Main.panel.addToStatusArea('vigia', this._indicator);
     }
 
+    // 'unlock-dialog' keeps VigIA alive across screen lock: releasing the
+    // keep-awake inhibitor the moment the user locks up would defeat the
+    // feature (agents keep working while the user is away). R18 notes: no
+    // keyboard-event signals are used, cleanup is unconditional, and the
+    // enable()/disable() cycle is fully symmetric.
     disable() {
-        this._indicator?.destroy();
+        this._indicator.destroy();
         this._indicator = null;
     }
 }

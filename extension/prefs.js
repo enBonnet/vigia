@@ -83,8 +83,8 @@ export default class VigiaPreferences extends ExtensionPreferences {
         // ---- about ----------------------------------------------------
         const about = new Adw.PreferencesGroup({title: 'About'});
         page.add(about);
-        // Note: metadata 'version' (2) is the EGO package version; the About
-        // row and the daemon carry their own product version (1.0).
+        // metadata 'version' is the EGO package version (assigned on upload,
+        // not locally); the About row and the daemon carry version 1.0.
         about.add(new Adw.ActionRow({
             title: 'VigIA 1.0',
             subtitle: 'The lookout for your AI agents · daemon: systemctl --user status vigia',
