@@ -13,21 +13,26 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UUID="vigia@enbonnet.github.com"
 OUT="${1:-$ROOT/pack}"
 
-command -v zip >/dev/null || { echo "zip(1) is required" >&2; exit 1; }
+command -v unzip >/dev/null || { echo "unzip(1) is required" >&2; exit 1; }
 command -v gnome-extensions >/dev/null || { echo "gnome-extensions is required" >&2; exit 1; }
 
-# The GNOME 50 packer compiles nothing and omits schemas/gschemas.compiled,
-# without which getSettings() fails after install — compile first, pack, then
-# append the freshly built cache. icons/ is loaded by absolute path at runtime
-# (extension.path/icons/...), so it must ride along as an extra source.
+# Compile as a schema syntax check and to refresh the local dev cache; the
+# packer itself only picks up *.gschema.xml. GNOME 45+ compiles schemas at
+# install time — gnome-extensions install, extensions.gnome.org installs and
+# auto-updates all run glib-compile-schemas on the extracted schemas/ — so
+# the zip must carry the XML only: EGO rejects packages that ship
+# schemas/gschemas.compiled (EGO-P-006). icons/ is loaded by absolute path
+# at runtime (extension.path/icons/...), so it must ride along as an extra
+# source.
 glib-compile-schemas "$ROOT/extension/schemas"
 rm -rf "$OUT"
 mkdir -p "$OUT"
 gnome-extensions pack --force --out-dir="$OUT" --extra-source=icons "$ROOT/extension"
-(cd "$ROOT/extension" && zip -q "$OUT/$UUID.shell-extension.zip" schemas/gschemas.compiled)
 
 echo "→ $OUT/$UUID.shell-extension.zip"
 unzip -l "$OUT/$UUID.shell-extension.zip"
-# Fail loudly if the cache went missing again.
-unzip -l "$OUT/$UUID.shell-extension.zip" | grep -q schemas/gschemas.compiled \
-    || { echo "ERROR: gschemas.compiled missing from the zip" >&2; exit 1; }
+# Fail loudly if the build artifact snuck back into the zip.
+if unzip -l "$OUT/$UUID.shell-extension.zip" | grep -q schemas/gschemas.compiled; then
+    echo "ERROR: gschemas.compiled must not ship in the zip (EGO-P-006)" >&2
+    exit 1
+fi
