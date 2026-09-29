@@ -17,8 +17,8 @@
 | `gettext-domain` | Unique; convention = the uuid. |
 | `settings-schema` | Recommended. Lets `this.getSettings()` be called with **no arguments**. Convention: `org.gnome.shell.extensions.<id>`. |
 | `session-modes` | Only `user` / `unlock-dialog` valid for EGO submissions (`gdm` is for system extensions and is rejected by the EGO analyzer). **MUST be dropped if only `user` is used** (the default). |
-| `version` | EGO-internal; **MUST** be a whole number if present; developers **SHOULD NOT** set it. |
-| `version-name` | User-visible version; regex `^(?!^[. ]+$)[a-zA-Z0-9 .]{1,16}$`. |
+| `version` | EGO-internal; **MUST** be a whole number if present; developers **SHOULD NOT** set it. See [EGO versioning and uploads](#ego-versioning-and-uploads). |
+| `version-name` | User-visible version displayed on the extension page; regex `^(?!^[. ]+$)[a-zA-Z0-9 .]{1,16}$`. Use it to publish the project's own semver (e.g. `"1.1"`) alongside the internal counter, and bump it per release. |
 | `donations` | Keys only from: `buymeacoffee`, `custom`, `github`, `kofi`, `liberapay`, `opencollective`, `patreon`, `paypal`. Values: string or array (max 3). `custom` = full URL; others = user handle. Drop if unused. |
 
 Minimal example:
@@ -36,7 +36,33 @@ Minimal example:
 Review checklist: no unnecessary keys (R17); JSON parses; uuid regex
 `^[A-Za-z0-9._-]+@[A-Za-z0-9._-]+$` and no `gnome.org` namespace; shell-version
 plausible (no future versions); `version` not a string/semver; session-modes
-valid; `donations` keys valid.
+valid; `donations` keys valid; `version-name` (if present) matches the
+intended release.
+
+## EGO versioning and uploads
+
+How the version numbers on an extension page actually work (matters when
+auditing "wrong version" reports and when advising on re-submission):
+
+- The internal `version` is a **per-extension upload counter assigned by the
+  site** — it increments on every submission, whether approved, rejected, or
+  still unreviewed. Developers cannot choose it and should not put it in
+  metadata.json.
+- What users see as the version on the page is `version-name`. Ship the
+  project's own semver there (e.g. `"1.1"`) so the page does not show a bare
+  upload counter; the two numbering schemes are independent and never need to
+  match.
+- **A new upload supersedes a pending review.** Uploading is allowed while the
+  previous version is "Unreviewed"; reviewers only review the latest upload,
+  so the superseded one stays in the table but is never reviewed. Leave a
+  note on the review thread saying the newest upload replaces it, and
+  summarize what changed since the last look — reviewers prioritize small
+  diffs.
+- Rejected and superseded versions remain listed forever; the extension stays
+  unpublished until some version is approved. When EGO serves an approved
+  download it injects the internal `version` into the packaged
+  metadata.json — so at runtime `this.metadata.version` (prefs and extension)
+  holds the site counter, while `version-name` keeps the human version.
 
 ## GSettings schemas
 
