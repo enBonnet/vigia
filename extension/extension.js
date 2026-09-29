@@ -157,7 +157,16 @@ class VigiaIndicator extends PanelMenu.Button {
         this.menu.addMenuItem(header);
 
         this._listSection = new PopupMenu.PopupMenuSection();
-        this.menu.addMenuItem(this._listSection);
+        // long agent histories scroll inside the popup instead of
+        // overflowing the screen (same pattern as the shell's PopupSubMenu:
+        // St.ScrollView wrapper + a max-height set from CSS)
+        this._listScroll = new St.ScrollView({
+            style_class: 'vigia-list-scroll',
+            overlay_scrollbars: true,
+            child: this._listSection.actor,
+        });
+        this._listScroll.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC);
+        this.menu.box.add_child(this._listScroll);
 
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
@@ -677,12 +686,12 @@ export default class VigiaExtension extends Extension {
         Main.panel.addToStatusArea('vigia', this._indicator);
     }
 
-    // 'unlock-dialog' keeps VigIA alive across screen lock: releasing the
-    // keep-awake inhibitor the moment the user locks up would defeat the
-    // feature (agents keep working while the user is away). R18 notes: no
-    // keyboard-event signals are used, cleanup is unconditional, and the
-    // enable()/disable() cycle is fully symmetric.
     disable() {
+        // Session mode 'unlock-dialog': VigIA must keep the keep-awake
+        // inhibitor active while the screen is locked — releasing it at
+        // lock time would defeat its purpose (agents keep working while
+        // the user is away). No keyboard-event signals are ever connected,
+        // and this cleanup runs unconditionally in every session mode.
         this._indicator.destroy();
         this._indicator = null;
     }

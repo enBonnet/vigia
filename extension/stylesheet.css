@@ -37,6 +37,9 @@
 }
 
 /* menu */
+.vigia-list-scroll {
+  max-height: 420px;
+}
 .vigia-row {
   spacing: 10px;
   padding: 4px 8px;

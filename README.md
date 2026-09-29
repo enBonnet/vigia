@@ -104,22 +104,27 @@ States: `idle` · `busy` · `question` · `done`.
 - **OpenCode**: busy comes straight from the server's own `session.active`
   list — a session is working exactly while it has a run in flight, so dead
   or aborted sessions never linger. When a run ends, a working session
-  flashes green `done` and is dropped; it never sits as an idle row. Pending
-  rows in `permission.request.list` → `question`. Subagent sessions
-  (`@explore`/`@review`…) only appear while busy or asking.
+  flashes green `done`, then settles into the list as an idle row for the
+  history window. Pending rows in `permission.request.list` → `question`.
+  Subagent sessions (`@explore`/`@review`…) only appear while busy or asking.
 - **Claude Code**: `UserPromptSubmit`/`Pre*ToolUse` → busy · `Notification`,
-  `PermissionRequest` → question · `Stop` → done · `SessionEnd` → removed.
-  Crash-safe twice over: if every PID the hook reported is gone, the entry is
-  dropped within seconds (any state); stale busy decays to idle after 30 min
-  as a fallback for reports without PIDs. `done` flashes green then drops,
-  like OpenCode.
-- **Generic**: busy while a matching process exists.
+  `PermissionRequest` → question · `Stop` → done · `SessionEnd` → idle
+  history. Crash-safe twice over: if every PID the hook reported is gone,
+  the entry settles to an idle history row within seconds (any state); stale
+  busy decays to idle after 30 min as a fallback for reports without PIDs.
+  `done` flashes green then settles to idle, like OpenCode.
+- **Generic**: busy while a matching process exists; when the process exits,
+  the row stays as idle history for the window.
+- **History**: all agents stay listed as idle rows for `history-hours`
+  (default 72) after their last activity; anything idle past the window
+  leaves the list. 0 drops entries as soon as they stop working.
 
 ## Settings
 
 Preferences (extension menu → *VigIA Preferences…*): per-source toggles,
-generic process list, OpenCode poll interval, done-badge fade seconds,
-show-when-idle, keep-awake. Stored in
+generic process list, OpenCode poll interval, done-badge fade seconds, how
+long finished agents stay listed (history-hours), show-when-idle,
+keep-awake. Stored in
 `org.gnome.shell.extensions.vigia` (the daemon reads the same keys live).
 
 ## Troubleshooting

@@ -38,9 +38,15 @@ export default class VigiaPreferences extends ExtensionPreferences {
         fade.subtitle = 'After this, a finished agent dims back in the top bar';
         general.add(fade);
 
+        const history = Adw.SpinRow.new_with_range(0, 336, 1);
+        history.title = 'Hours to keep finished agents listed';
+        history.subtitle = 'Finished agents stay in the menu as idle rows for this long after their last activity; 0 drops them as soon as they finish';
+        general.add(history);
+
         settings.bind('show-idle', showIdle, 'active', Gio.SettingsBindFlags.DEFAULT);
         settings.bind('keep-awake', keepAwake, 'active', Gio.SettingsBindFlags.DEFAULT);
         settings.bind('done-fade-seconds', fade, 'value', Gio.SettingsBindFlags.DEFAULT);
+        settings.bind('history-hours', history, 'value', Gio.SettingsBindFlags.DEFAULT);
 
         // ---- sources --------------------------------------------------
         const sources = new Adw.PreferencesGroup({
@@ -84,9 +90,9 @@ export default class VigiaPreferences extends ExtensionPreferences {
         const about = new Adw.PreferencesGroup({title: 'About'});
         page.add(about);
         // metadata 'version' is the EGO package version (assigned on upload,
-        // not locally); the About row and the daemon carry version 1.0.
+        // not locally); the About row and the daemon carry version 1.1.
         about.add(new Adw.ActionRow({
-            title: 'VigIA 1.0',
+            title: 'VigIA 1.1',
             subtitle: 'The lookout for your AI agents · daemon: systemctl --user status vigia',
         }));
     }

@@ -18,6 +18,11 @@
       <default>10</default>
       <summary>Seconds the green "done" badge stays lit before dimming</summary>
     </key>
+    <key name="history-hours" type="i">
+      <range min="0" max="336"/>
+      <default>72</default>
+      <summary>Hours to keep agents listed after their last activity (0 = drop idle entries immediately)</summary>
+    </key>
     <key name="source-opencode" type="b">
       <default>true</default>
       <summary>Watch OpenCode sessions via its background service</summary>

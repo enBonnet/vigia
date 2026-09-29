@@ -21,14 +21,20 @@ Sources:
   * OpenCode   — polls `opencode api session.list` + `permission.request.list`
                  + `session.active`. Busy comes straight from the server's own
                  active-run list; when a run ends, working sessions flash
-                 "done" and are dropped. Pending permission entries mark
-                 "question". If the API is unreachable, state is kept (or
-                 demoted to idle on a total outage).
+                 "done" and then settle into the idle history. Pending
+                 permission entries mark "question". If the API is
+                 unreachable, state is kept (or demoted to idle on a total
+                 outage).
   * Claude Code — receives state pushed by the vigia-claude.sh hook reporter.
-                 Entries whose reported PIDs are all gone are dropped within
-                 seconds (any state); "done" flashes briefly, then the entry
-                 is dropped.
+                 Entries whose reported PIDs are all gone settle to idle
+                 within seconds (any state); "done" flashes briefly, then the
+                 entry settles to idle too.
   * Generic     — /proc scan of configured process names (busy while alive).
+
+History: every source keeps finished agents listed as idle rows for a
+configurable window (gsettings `history-hours`, default 72 h since their
+last activity); anything idle past the window leaves the list. 0 drops
+entries as soon as they stop working.
 
 States: idle | busy | question | done
 """
@@ -48,7 +54,7 @@ from gi.repository import Gio, GLib  # noqa: E402
 BUS_NAME = "org.vigia.Watcher"
 OBJ_PATH = "/org/vigia/Watcher"
 IFACE = "org.vigia.Watcher"
-VERSION = "1.0"
+VERSION = "1.1"
 
 NODE_XML = f"""<node>
   <interface name="{IFACE}">
@@ -82,11 +88,9 @@ NODE_XML = f"""<node>
 </node>"""
 
 # policy knobs
-IDLE_DISPLAY_WINDOW = 1800     # keep idle sessions listed for 30 min
 BUSY_STALE_SECS = 1800         # claude "busy" with no refresh -> idle
-DONE_HOLD_SECS = 120           # "done" flash: opencode drops, claude -> idle
+DONE_HOLD_SECS = 120           # "done" flash before settling to idle history
 QUESTION_MAX_SECS = 12 * 3600  # questions expire after 12 h
-IDLE_TTL = 24 * 3600           # idle claude entries drop after a day
 
 VALID_STATES = ("idle", "busy", "question", "done")
 
@@ -100,6 +104,7 @@ class Settings:
         "source-generic": True,
         "generic-processes": "codex,aider,goose,gemini,cursor-agent",
         "poll-interval": 4,
+        "history-hours": 72,
     }
 
     def __init__(self):
@@ -160,6 +165,14 @@ class Vigia:
 
     def enabled(self, source):
         return bool(self._settings.get(source))
+
+    def history_secs(self):
+        """Retention window for idle entries, in seconds (read live).
+
+        Agents stay listed as idle rows this long after their last activity;
+        0 drops them as soon as they stop working.
+        """
+        return max(0, int(self._settings.get("history-hours") or 0)) * 3600
 
     # ----------------------------------------------------------- agent state
 
@@ -236,7 +249,15 @@ class Vigia:
     def report(self, agent, session, state, title, detail, pids=""):
         """Entry point for hook reporters (Claude Code etc.)."""
         if state == "gone":
-            self.remove(f"claude:{session or 'default'}")
+            aid = f"claude:{session or 'default'}"
+            if aid in self._agents and self.history_secs() > 0:
+                # session ended cleanly: settle into the idle history instead
+                # of dropping — but forget the PIDs first, the CLI is exiting
+                # and the dead-PID check would remove the fresh history row
+                self._agents[aid]["pids"] = ""
+                self._transition(aid, "idle")
+            else:
+                self.remove(aid)
             return True
         self.upsert(
             f"claude:{session or 'default'}",
@@ -301,6 +322,7 @@ class Vigia:
             return
         sessions, perms = sessions or {}, perms or {}
         now = time.time()
+        window = self.history_secs()
         seen = set()
 
         # sessions with a run in flight right now — the server's own,
@@ -336,24 +358,28 @@ class Vigia:
             question = sid in ask or f"project:{s.get('projectID') or ''}" in ask
             state = "question" if question else ("busy" if busy else "idle")
 
+            t = s.get("time") or {}
+            updated = (t.get("updated") or 0) / 1000.0
+            idle_ts = (t.get("idle") or 0) / 1000.0
+
+            # subagent sessions (@explore/@review/…) only matter while
+            # active; idle sessions whose last activity fell outside the
+            # history window never list at all — and are dropped even when
+            # we already track them (this must run before the tracked-idle
+            # short-circuit below)
+            if state == "idle" and (
+                    bool(s.get("parentID"))
+                    or max(updated, idle_ts) < now - window):
+                self.remove(aid)
+                continue
+
             old = self._agents.get(aid)
             if state == "idle" and old:
                 if old["state"] in ("busy", "question"):
                     # the run just ended (or the process died) — green "done"
-                    # flash; age_out drops the entry shortly after
+                    # flash; age_out settles it to idle history afterwards
                     self._transition(aid, "done")
-                seen.add(aid)  # done entries are kept until age_out drops them
-                continue
-
-            # subagent sessions (@explore/@review/…) only matter while active
-            t = s.get("time") or {}
-            updated = (t.get("updated") or 0) / 1000.0
-            idle = t.get("idle")
-            idle_ts = idle / 1000.0 if idle else 0.0
-            if state == "idle" and (
-                    bool(s.get("parentID"))
-                    or max(updated, idle_ts) < now - IDLE_DISPLAY_WINDOW):
-                self.remove(aid)
+                seen.add(aid)  # kept as idle history until the window is up
                 continue
 
             model = s.get("model")
@@ -366,9 +392,13 @@ class Vigia:
             )
             seen.add(aid)
 
-        # prune anything we no longer see at all
+        # prune anything we no longer see at all — such a session cannot
+        # still be working, so demote it first and let the history window
+        # decide when the idle row goes
         for aid in [a for a in self._agents if a.startswith("opencode:") and a not in seen]:
-            if now - self._agents[aid]["updated"] > IDLE_DISPLAY_WINDOW:
+            if self._agents[aid]["state"] in ("busy", "question"):
+                self._transition(aid, "idle")
+            elif now - self._agents[aid]["updated"] > window:
                 self.remove(aid)
 
     # -------------------------------------------------------- generic procs
@@ -393,6 +423,7 @@ class Vigia:
                 continue
             if comm in names:
                 pids_by_name.setdefault(comm, []).append(int(pid))
+        window = self.history_secs()
         for name in names:
             aid = f"proc:{name}"
             found = pids_by_name.get(name, [])
@@ -401,8 +432,12 @@ class Vigia:
                 self.upsert(aid, name, "busy", name,
                             f"{n} process{'es' if n > 1 else ''} running",
                             pids=",".join(str(p) for p in found))
-            else:
-                self.remove(aid)
+            elif aid in self._agents:
+                if window > 0:
+                    # process gone: settle into the idle history
+                    self._transition(aid, "idle")
+                else:
+                    self.remove(aid)
         # drop entries whose process name is no longer configured
         for aid in [a for a in self._agents if a.startswith("proc:")]:
             if aid[5:] not in names:
@@ -458,33 +493,51 @@ class Vigia:
     # -------------------------------------------------------------- aging
 
     def age_out(self):
+        window = self.history_secs()
         now = time.time()
         for aid, e in list(self._agents.items()):
             st = e["state"]
-            if e["agent"] == "opencode":
-                # finished flash, then drop — no lingering idle rows
-                if st == "done" and now - e["since"] > DONE_HOLD_SECS:
+
+            # every source: idle entries leave the list once the history
+            # window since their last activity is up (0 = right away)
+            if st == "idle" and now - e["updated"] > window:
+                self.remove(aid)
+                continue
+
+            # the green "done" flash settles into the idle history
+            if st == "done" and now - e["since"] > DONE_HOLD_SECS:
+                if window > 0:
+                    self._transition(aid, "idle")
+                else:
                     self.remove(aid)
+                continue
+
+            if e["agent"] == "opencode":
                 continue
             if e["agent"] != "claude":
                 continue
+
             # hooks tell us which processes belong to a session: if they are
-            # all gone the session is over, whatever the last hook said
+            # all gone the session is over, whatever the last hook said —
+            # settle it into the idle history rather than dropping it
             pids = [p for p in (e.get("pids") or "").split(",")
                     if p.strip().isdigit()]
             if pids and all(not os.path.exists(f"/proc/{p.strip()}")
                             for p in pids):
-                self.dbg(f"{aid} pids gone -> remove")
-                self.remove(aid)
+                self.dbg(f"{aid} pids gone -> "
+                         f"{'idle' if window > 0 else 'remove'}")
+                e["pids"] = ""   # they are dead; don't re-trigger this check
+                if window > 0:
+                    if st != "idle":
+                        self._transition(aid, "idle")
+                else:
+                    self.remove(aid)
                 continue
-            if st == "done" and now - e["since"] > DONE_HOLD_SECS:
-                self.remove(aid)  # flash over — drop, like opencode
-            elif st == "busy" and now - e["updated"] > BUSY_STALE_SECS:
+
+            if st == "busy" and now - e["updated"] > BUSY_STALE_SECS:
                 self._transition(aid, "idle")
             elif st == "question" and now - e["since"] > QUESTION_MAX_SECS:
                 self._transition(aid, "idle")
-            elif st == "idle" and now - e["updated"] > IDLE_TTL:
-                self.remove(aid)
 
     # ---------------------------------------------------------------- D-Bus
 
