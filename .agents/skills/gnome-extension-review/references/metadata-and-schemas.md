@@ -16,7 +16,7 @@
 | --- | --- |
 | `gettext-domain` | Unique; convention = the uuid. |
 | `settings-schema` | Recommended. Lets `this.getSettings()` be called with **no arguments**. Convention: `org.gnome.shell.extensions.<id>`. |
-| `session-modes` | Only `user` / `unlock-dialog` valid (plus `gdm` for system extensions). **MUST be dropped if only `user` is used** (the default). |
+| `session-modes` | Only `user` / `unlock-dialog` valid for EGO submissions (`gdm` is for system extensions and is rejected by the EGO analyzer). **MUST be dropped if only `user` is used** (the default). |
 | `version` | EGO-internal; **MUST** be a whole number if present; developers **SHOULD NOT** set it. |
 | `version-name` | User-visible version; regex `^(?!^[. ]+$)[a-zA-Z0-9 .]{1,16}$`. |
 | `donations` | Keys only from: `buymeacoffee`, `custom`, `github`, `kofi`, `liberapay`, `opencollective`, `patreon`, `paypal`. Values: string or array (max 3). `custom` = full URL; others = user handle. Drop if unused. |
@@ -44,8 +44,11 @@ valid; `donations` keys valid.
 - Path **MUST** start with `/org/gnome/shell/extensions`.
 - XML file **MUST** be inside the extension ZIP, at `schemas/<schema-id>.gschema.xml`
   (basename = schema ID).
-- Compiled `schemas/gschemas.compiled` is normally included too (auto-compiled
-  by `gnome-extensions` / EGO since GNOME 44).
+- The compiled `schemas/gschemas.compiled` **MUST NOT** be shipped in the EGO
+  ZIP (R25 / EGO-P-006 — warning from Shexli, EGO's automated reviewer; human
+  reviewers echo it). EGO compiles the schema when serving the download, so
+  only the XML source belongs in the package. Keep the compiled file solely as
+  a gitignored local build artifact for source-tree installs.
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -70,7 +73,6 @@ ZIP layout (dir name = uuid):
 ```
 example@gjs.guide.zip
     locale/…/example.mo          (compiled translations only)
-    schemas/gschemas.compiled
     schemas/org.gnome.shell.extensions.example.gschema.xml
     extension.js                 (required)
     metadata.json                (required)

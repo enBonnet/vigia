@@ -4,10 +4,13 @@ An AI agent skill that reviews and audits GNOME Shell extensions written in GJS
 against the official [extensions.gnome.org](https://extensions.gnome.org) (EGO)
 review guidelines and [gjs.guide](https://gjs.guide) best practices.
 
-It bundles the authoritative EGO review rules (R1–R27), a lifecycle-audit
-method, a `js/ui` API map, and a dependency-free Python static scanner — so any
-compatible agent can find rejection risks (memory leaks, forbidden imports,
-missing `disable()` cleanup, metadata/schema problems) before you submit.
+It bundles the authoritative EGO review rules (R1–R35, plus GNOME 49/50
+removed-API checks), a lifecycle-audit method, a `js/ui` API map, and a
+dependency-free Python static scanner — so any compatible agent can find
+rejection risks (memory leaks, forbidden imports, missing `disable()` cleanup,
+blocking IO, metadata/schema problems) before you submit. Rule ids are
+cross-referenced with [Shexli](https://gitlab.gnome.org/Infrastructure/extensions-web),
+the static analyzer EGO runs on uploads.
 
 **Scope:** GNOME Shell **45+** (ESModules, `Extension` class). Pre-45 code is
 flagged as legacy, not reviewed.
@@ -90,9 +93,13 @@ python3 scripts/static_checks.py /path/to/your-extension
 | Lifecycle | constructor hygiene, `enable()`/`disable()` symmetry, leak-free cleanup order |
 | Signals & sources | connect/disconnect balance, timeout creation/removal, orphaned sources |
 | Forbidden imports | `Gtk`/`Gdk`/`Adw` in the shell process, `St`/`Clutter` in prefs (R6/R7) |
-| Legacy patterns | `imports.*`, `Lang.bind`, `Mainloop` |
-| Metadata & schemas | uuid, `shell-version`, gschema id/path/filename, session-modes |
-| Packaging & legal | binaries in the zip, unnecessary files, license, AI notice |
+| Blocking IO | sync file/subprocess APIs in the shell process (R28/R29), Soup sessions left un-aborted (R35) |
+| Clipboard | `St.Clipboard` use → declaration + scrutiny checklist (R13) |
+| Legacy patterns | `imports.*`, `Lang.bind`, `Mainloop`, `imports._gi`, lookup helpers |
+| Prefs API | `fillPreferencesWindow` vs `getPreferencesWidget` (R31), `close-request` cleanup (R34) |
+| Version compat | GNOME 49/50 removed APIs, gated on `shell-version` (C49/C50) |
+| Metadata & schemas | uuid, `shell-version`, gschema id/path/filename, session-modes, unlock-dialog `disable()` comment placement (R18/EGO-M-008) |
+| Packaging & legal | binaries in the zip, compiled schemas (R25/EGO-P-006), unreachable modules, license, AI notice |
 
 Findings are severity-tagged:
 
@@ -105,7 +112,7 @@ Findings are severity-tagged:
 ```
 ├── SKILL.md                     # Skill definition and review workflow
 ├── references/
-│   ├── review-guidelines.md     # EGO review rules (R1–R27)
+│   ├── review-guidelines.md     # EGO review rules (R1–R35, C49/C50) + Shexli cross-ref
 │   ├── best-practices.md        # gjs.guide anti-pattern benchmark
 │   ├── lifecycle-audit.md       # enable/disable symmetry method
 │   ├── shell-ui-map.md          # js/ui module map + live API verification

@@ -47,10 +47,14 @@ Module import + `constructor()` (= `init()` in legacy code) is **static-only**
    | `InjectionManager.overrideMethod` | `restoreMethod(...)` or `manager.clear()` |
    | prototype patch / function override | restore original reference |
    | `settings.bind(...)` / settings signal | `settings.unbind(...)` / disconnect |
-   | `Soup.Session`, `Gio.Cancellable` | `cancel()`, drop reference |
+   | `Soup.Session`, `Gio.Cancellable` | `cancel()`, drop reference; `Soup.Session` also `abort()` (R35/EGO037) |
    | `Gio.DBus.*` watches/owned names | unwatch/unown |
    | stylesheet added via `St.ThemeContext` / `loadTheme` | restore previous theme |
    | `Main._backgroundActor`-style grabs, `pushModal` | corresponding pop/release |
+
+   After destroying owned objects, **release the references**
+   (`this._widget = null;`) — the null-release pattern reviewers expect
+   (Shexli EGO027 / EGO-L-005).
 
 4. **Check destroy() order** (custom classes): remove sources → disconnect
    signals → release child refs → `super.destroy()` **last**.
@@ -71,6 +75,7 @@ Module import + `constructor()` (= `init()` in legacy code) is **static-only**
 - try-catch swallowing cleanup failures (anti-pattern).
 - Cleanup in a different class than creation (spaghetti cleanup).
 - Timeouts re-created on every settings change without removing the old source.
+- Owned references never released with `null` after cleanup (EGO027).
 
 ## 4. Correct reference skeleton (GNOME 45+)
 
@@ -111,8 +116,20 @@ export default class ExampleExtension extends Extension {
 
 ## 5. `unlock-dialog` checklist (when `session-modes` includes it)
 
-- `disable()` has a comment explaining why `unlock-dialog` is needed (rule R18).
+- `disable()` has a comment explaining why `unlock-dialog` is needed — inside
+  the function body, not merely above the method (rule R18; EGO's automated
+  review reports a missing/misplaced comment as EGO-M-008).
 - Keyboard-event signals are disconnected while the screen is locked.
 - The extension does not disable selectively (partial cleanup depending on
   session mode is forbidden).
 - The extension tolerates `disable()` + `enable()` cycles on mode changes.
+
+## 6. Preferences windows
+
+- 45+ prefs implement `fillPreferencesWindow(window)` — `getPreferencesWidget()`
+  is the legacy entry point (rule R31 / Shexli EGO-C45-001).
+- Objects stored on the exported prefs class (`this._…`) outlive the window;
+  release them via a `close-request` handler on the window, or store nothing
+  on the instance (rule R34 / Shexli EGO033).
+- Local objects created inside `fillPreferencesWindow()` and only added to the
+  window are fine — the window owns them.

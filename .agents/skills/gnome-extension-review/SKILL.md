@@ -58,7 +58,17 @@ python3 <skill-dir>/scripts/static_checks.py <extension-dir>
 The scanner greps for rule violations: forbidden cross-process imports,
 deprecated modules, metadata.json problems, schema problems, connect/disconnect
 and timeout creation/removal count mismatches, `run_dispose`, lifecycle flags,
-overlong lines, binaries, AI notice, and more.
+synchronous file/subprocess IO (R28/R29), clipboard usage (R13), privileged
+spawns (R14), the 45+ prefs API (R31), `imports._gi`, lookup helpers, manual
+stylesheet loading, Soup sessions, unreachable modules, compiled-schema
+shipping, unlock-dialog `disable()` comment placement (R18/EGO-M-008),
+overlong lines, binaries, AI notice, GNOME 49/50 removed APIs
+(version-gated), and more.
+
+Rule ids cross-reference EGO's [Shexli](https://gitlab.gnome.org/Infrastructure/extensions-web)
+static analyzer (numeric ids `EGO001`–`EGO037`, display ids like `EGO-X-004`
+on review pages) — see the mapping table in
+`references/review-guidelines.md` (Appendix).
 
 **These are candidates, not verdicts.** For each finding, read the surrounding
 code and confirm or reject it (e.g. a `connect()` may be cleaned up through a
@@ -96,10 +106,17 @@ Never trust memory for version-sensitive APIs. Use the commands in
 
 ### 5. Check metadata, schemas, packaging, legal
 
-Per `references/metadata-and-schemas.md`: uuid, shell-version plausibility,
-session-modes, donations keys, settings-schema convention, gschema
-id/path/filename, unnecessary files, binaries, licensing (GPL-compatible),
-attribution, CoC/political/trademark content.
+Per `references/metadata-and-schemas.md`: uuid, shell-version plausibility
+(stable releases + at most one dev release), session-modes, donations keys,
+settings-schema convention, gschema id/path/filename, no compiled
+`gschemas.compiled` for 45+ targets (R25/EGO-P-006), unnecessary files,
+binaries, licensing (GPL-compatible), attribution, CoC/political/trademark
+content. If `unlock-dialog` is declared, the comment explaining it **MUST** be
+inside the `disable()` body, not above the method (R18/EGO-M-008). If the
+extension declares clipboard access, verify it is declared in the
+metadata description (R13 checklist). If `shell-version` lists 49 or 50,
+run the removed-API checks (C49/C50) from `references/review-guidelines.md`
+§7.
 
 If the code carries the AI-generation notice ("Generated with AI..."), keep it
 when handing the code back, and remind the author it must be removed before EGO
@@ -137,9 +154,9 @@ metadata, imports) — so the user knows the coverage.
 ```
 
 Keep every finding tied to a rule id from `references/review-guidelines.md`
-(R1–R27) or an explicit "best-practices" tag. Include file:line for each. If
-something is suspected but could not be verified (e.g. runtime-only leak), list
-it under Should fix with the uncertainty stated.
+(R1–R35, C49-*/C50-*) or an explicit "best-practices" tag. Include file:line
+for each. If something is suspected but could not be verified (e.g. runtime-only
+leak), list it under Should fix with the uncertainty stated.
 
 ## Handling fixes requested by the user
 
