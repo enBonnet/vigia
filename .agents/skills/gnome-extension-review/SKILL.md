@@ -10,6 +10,7 @@ description: >
   imports (Gtk in shell, St in prefs), orphaned signals/timeouts, or lifecycle
   violations in GJS code; and also when asked to fix or refactor GNOME
   extension code, even if the word "review" is not used.
+version: 1.1.0
 ---
 
 # GNOME Shell Extension Review
